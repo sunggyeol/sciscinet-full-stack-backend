@@ -1,0 +1,40 @@
+# 1. Jupyter Notebook Files
+.ipynb_checkpoints/
+nbextensions/
+.jupyter/
+
+# 2. Python-specific Files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# 3. Virtual Environments
+.venv/
+venv/
+ENV/
+env/
+.env
+
+# 4. Generated Data & Local Files
+# ---
+# IMPORTANT: Add the local data files you generated!
+# This prevents you from committing large CSVs/datasets to your repo.
+# ---
+*.csv
+*.txt
+*.json
+*.tsv
+*.db
+# If you make an exception, like for a small config file:
+# !my_config.json
+# !core_paper_ids.txt
+
+# 5. OS & Editor Specific Files
+.DS_Store
+Thumbs.db
+*.bak
+*.swp
+*.swo
+.idea/
+.vscode/
