@@ -22,10 +22,10 @@ env/
 # This prevents you from committing large CSVs/datasets to your repo.
 # ---
 *.csv
-*.txt
+# *.txt
 *.json
 *.tsv
-*.db
+# *.db
 # If you make an exception, like for a small config file:
 # !my_config.json
 # !core_paper_ids.txt
