@@ -55,7 +55,7 @@ async def test_database_connection():
 
     except Exception as e:
         print(f"\nDatabase connection test FAILED: {e}")
-        print("\nMake sure the database file exists at: data/sciscinet_vt_cs.db")
+        print("\nMake sure the database file exists at: data/sciscinet_vt_cs_2013_2022.db")
         return False
 
 

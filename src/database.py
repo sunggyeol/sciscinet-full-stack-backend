@@ -1,6 +1,6 @@
 import aiosqlite
 
-DB_PATH = "data/sciscinet_vt_cs.db"
+DB_PATH = "data/sciscinet_vt_cs_2013_2022.db"
 
 
 async def get_db():

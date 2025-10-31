@@ -25,7 +25,7 @@ API docs: http://localhost:8000/docs
 - Python 3.11+
 - uv package manager
 - Redis server
-- SQLite database: `data/sciscinet_vt_cs.db`
+- SQLite database: `data/sciscinet_vt_cs_2013_2022.db`
 
 ## Install Redis
 

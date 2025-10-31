@@ -41,11 +41,20 @@ async def get_papers_by_year():
 
 
 @router.get("/data/patents-by-year")
-async def get_patents_by_year(year: int = Query(..., ge=2015, le=2022)):
+async def get_patents_by_year(year: int = Query(..., ge=2013, le=2022)):
     """Get patent counts for specific year."""
     data = await get_cached_json(f"data:patents:{year}")
     if data is None:
         raise HTTPException(status_code=404, detail=f"Patent data for year {year} not found. Run pre-cache script.")
+    return data
+
+
+@router.get("/network/hierarchical-citation")
+async def get_hierarchical_citation_network():
+    """Get hierarchical citation network for edge bundling visualization."""
+    data = await get_cached_json("net:hierarchical-citation")
+    if not data:
+        raise HTTPException(status_code=404, detail="Hierarchical citation network data not found. Run pre-cache script.")
     return data
 
 

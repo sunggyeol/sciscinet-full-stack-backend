@@ -235,7 +235,7 @@ async def compute_community_network():
 
 async def compute_papers_by_year():
     """
-    Count papers by year (2015-2022).
+    Count papers by year (2013-2022).
     """
     db = await get_db()
 
@@ -243,7 +243,7 @@ async def compute_papers_by_year():
         """
         SELECT year, COUNT(paper_id) as count
         FROM papers
-        WHERE year >= 2015 AND year <= 2022
+        WHERE year >= 2013 AND year <= 2022
         GROUP BY year
         ORDER BY year
         """
@@ -270,3 +270,108 @@ async def compute_patents_for_year(year: int):
     await db.close()
 
     return [row["patent_count"] for row in rows]
+
+
+async def compute_hierarchical_citation_network():
+    """
+    Build citation network with hierarchical structure for edge bundling.
+    Returns data optimized for radial layout with community-based hierarchy.
+    """
+    db = await get_db()
+
+    # Get papers from 2020-2022
+    papers_cursor = await db.execute(
+        "SELECT paper_id, title, citation_count FROM papers WHERE year >= 2020 AND year <= 2022"
+    )
+    papers = await papers_cursor.fetchall()
+
+    # Get citation links
+    links_cursor = await db.execute(
+        """
+        SELECT pr.paper_id, pr.reference_id
+        FROM paper_references pr
+        JOIN papers p1 ON pr.paper_id = p1.paper_id
+        JOIN papers p2 ON pr.reference_id = p2.paper_id
+        WHERE p1.year >= 2020 AND p1.year <= 2022
+        AND p2.year >= 2020 AND p2.year <= 2022
+        """
+    )
+    links = await links_cursor.fetchall()
+
+    await db.close()
+
+    # Build directed graph
+    G = nx.DiGraph()
+
+    # Add nodes with attributes
+    for paper in papers:
+        paper_id = paper["paper_id"]
+        G.add_node(paper_id, 
+                   title=paper["title"],
+                   citation_count=paper["citation_count"] or 0)
+
+    # Add edges
+    for link in links:
+        if link["paper_id"] in G and link["reference_id"] in G:
+            G.add_edge(link["paper_id"], link["reference_id"])
+
+    # Filter: keep nodes with citation_count > 5 OR in_degree > 1
+    filtered_nodes = set()
+    for node in G.nodes():
+        citation_count = G.nodes[node].get("citation_count", 0)
+        in_degree = G.in_degree(node)
+        if citation_count > 5 or in_degree > 1:
+            filtered_nodes.add(node)
+
+    # Create subgraph
+    G_filtered = G.subgraph(filtered_nodes)
+
+    # Run community detection on filtered graph
+    G_undirected = G_filtered.to_undirected()
+    communities = nx.algorithms.community.louvain_communities(G_undirected)
+    
+    # Create node to community mapping
+    node_to_community = {}
+    for community_id, community in enumerate(communities):
+        for node in community:
+            node_to_community[node] = community_id
+
+    # Build hierarchical structure for edge bundling
+    # Format: nodes with hierarchical path info
+    nodes = []
+    for node in G_filtered.nodes():
+        community_id = node_to_community.get(node, 0)
+        nodes.append({
+            "id": str(node),
+            "name": G_filtered.nodes[node]["title"][:50] if G_filtered.nodes[node].get("title") else str(node),
+            "community": community_id,
+            "citation_count": G_filtered.nodes[node].get("citation_count", 0),
+            "degree": G_filtered.degree(node)
+        })
+
+    # Build links
+    links_out = []
+    for u, v in G_filtered.edges():
+        links_out.append({
+            "source": str(u),
+            "target": str(v),
+            "source_community": node_to_community.get(u, 0),
+            "target_community": node_to_community.get(v, 0)
+        })
+
+    # Build community summary
+    community_summary = []
+    for i, community in enumerate(communities):
+        community_nodes = list(community)
+        community_summary.append({
+            "id": i,
+            "size": len(community_nodes),
+            "nodes": [str(n) for n in community_nodes[:100]]  # Limit for performance
+        })
+
+    return {
+        "nodes": nodes,
+        "links": links_out,
+        "communities": community_summary,
+        "total_communities": len(communities)
+    }

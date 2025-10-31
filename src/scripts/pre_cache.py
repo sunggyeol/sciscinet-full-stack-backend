@@ -11,6 +11,7 @@ from src.services.processing import (
     compute_community_network,
     compute_papers_by_year,
     compute_patents_for_year,
+    compute_hierarchical_citation_network,
 )
 
 
@@ -24,8 +25,9 @@ async def main():
         "net:citation",
         "net:collaboration",
         "net:citation-community",
+        "net:hierarchical-citation",
         "data:timeline",
-    ] + [f"data:patents:{year}" for year in range(2015, 2023)]
+    ] + [f"data:patents:{year}" for year in range(2013, 2023)]
 
     for key in keys_to_delete:
         await redis.delete(key)
@@ -49,6 +51,12 @@ async def main():
     await cache_json("net:citation-community", community_data)
     print(f"  Cached {len(community_data['children'])} communities")
 
+    # Compute and cache hierarchical citation network
+    print("Computing hierarchical citation network (for edge bundling)...")
+    hierarchical_data = await compute_hierarchical_citation_network()
+    await cache_json("net:hierarchical-citation", hierarchical_data)
+    print(f"  Cached {len(hierarchical_data['nodes'])} nodes, {len(hierarchical_data['links'])} links, {hierarchical_data['total_communities']} communities")
+
     # Compute and cache papers by year
     print("Computing papers by year...")
     timeline_data = await compute_papers_by_year()
@@ -57,7 +65,7 @@ async def main():
 
     # Compute and cache patents for each year
     print("Computing patents by year...")
-    for year in range(2015, 2023):
+    for year in range(2013, 2023):
         patents_data = await compute_patents_for_year(year)
         await cache_json(f"data:patents:{year}", patents_data)
         print(f"  Cached {len(patents_data)} patent counts for {year}")
