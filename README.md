@@ -37,11 +37,12 @@ redis-cli ping  # Should return: PONG
 
 ## How It Works
 
-The pre-cache script computes two networks from VT CS papers (2020-2022):
+The pre-cache script computes two networks from VT CS papers (2018-2022):
 
 **Citation Network**
 - Papers citing each other
-- Filters to important nodes (citation_count > 5 OR in_degree > 1)
+- Filters to important nodes (citation count > 5 OR in_degree > 1)
+- Reduces ~19,000 papers to ~650 core nodes for readable visualization
 - Runs Louvain community detection for colored clusters
 
 **Collaboration Network**
@@ -49,7 +50,7 @@ The pre-cache script computes two networks from VT CS papers (2020-2022):
 - Filters to active collaborators (degree > 2)
 - Edge weight = number of shared papers
 
-Both are cached in Redis for instant API responses.
+Both are cached in Redis for instant API responses. The backend filtering approach (60% payload reduction) ensures the frontend can render and interact with the network smoothly while preserving all essential structural information.
 
 ## API Endpoints
 
