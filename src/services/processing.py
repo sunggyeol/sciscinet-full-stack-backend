@@ -272,29 +272,35 @@ async def compute_patents_for_year(year: int):
     return [row["patent_count"] for row in rows]
 
 
-async def compute_hierarchical_citation_network():
+async def compute_hierarchical_citation_network(year_start: int = 2018, year_end: int = 2022):
     """
     Build citation network with hierarchical structure for edge bundling.
     Returns data optimized for radial layout with community-based hierarchy.
+    
+    Args:
+        year_start: Starting year for the network (inclusive)
+        year_end: Ending year for the network (inclusive)
     """
     db = await get_db()
 
-    # Get papers from 2020-2022
+    # Get papers for the specified year range
     papers_cursor = await db.execute(
-        "SELECT paper_id, title, citation_count FROM papers WHERE year >= 2020 AND year <= 2022"
+        "SELECT paper_id, title, citation_count, year FROM papers WHERE year >= ? AND year <= ?",
+        (year_start, year_end)
     )
     papers = await papers_cursor.fetchall()
 
-    # Get citation links
+    # Get citation links within the year range
     links_cursor = await db.execute(
         """
         SELECT pr.paper_id, pr.reference_id
         FROM paper_references pr
         JOIN papers p1 ON pr.paper_id = p1.paper_id
         JOIN papers p2 ON pr.reference_id = p2.paper_id
-        WHERE p1.year >= 2020 AND p1.year <= 2022
-        AND p2.year >= 2020 AND p2.year <= 2022
-        """
+        WHERE p1.year >= ? AND p1.year <= ?
+        AND p2.year >= ? AND p2.year <= ?
+        """,
+        (year_start, year_end, year_start, year_end)
     )
     links = await links_cursor.fetchall()
 
@@ -308,7 +314,8 @@ async def compute_hierarchical_citation_network():
         paper_id = paper["paper_id"]
         G.add_node(paper_id, 
                    title=paper["title"],
-                   citation_count=paper["citation_count"] or 0)
+                   citation_count=paper["citation_count"] or 0,
+                   year=paper["year"])
 
     # Add edges
     for link in links:
@@ -330,6 +337,9 @@ async def compute_hierarchical_citation_network():
     G_undirected = G_filtered.to_undirected()
     communities = nx.algorithms.community.louvain_communities(G_undirected)
     
+    # Sort communities by size for consistent ordering
+    communities = sorted(communities, key=len, reverse=True)
+    
     # Create node to community mapping
     node_to_community = {}
     for community_id, community in enumerate(communities):
@@ -346,7 +356,8 @@ async def compute_hierarchical_citation_network():
             "name": G_filtered.nodes[node]["title"][:50] if G_filtered.nodes[node].get("title") else str(node),
             "community": community_id,
             "citation_count": G_filtered.nodes[node].get("citation_count", 0),
-            "degree": G_filtered.degree(node)
+            "degree": G_filtered.degree(node),
+            "year": G_filtered.nodes[node].get("year", 0)
         })
 
     # Build links
@@ -373,5 +384,6 @@ async def compute_hierarchical_citation_network():
         "nodes": nodes,
         "links": links_out,
         "communities": community_summary,
-        "total_communities": len(communities)
+        "total_communities": len(communities),
+        "year_range": {"start": year_start, "end": year_end}
     }

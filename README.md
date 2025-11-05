@@ -5,62 +5,22 @@ FastAPI backend with Redis caching for network graph visualization.
 ## Quick Start
 
 ```bash
+# Install Redis
+sudo apt-get update && sudo apt-get install -y redis-server
+sudo systemctl start redis-server
+redis-cli ping  # Should return: PONG
+
 # Install dependencies
 uv sync
-
-# Start Redis
-sudo systemctl start redis-server
 
 # Cache the network data (important!)
 uv run python src/scripts/pre_cache.py
 
 # Run server
 uv run uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
+
+# Run tests
+uv run python tests/run_all_tests.py
 ```
 
 API docs: http://localhost:8000/docs
-
-## What You Need
-
-- Python 3.11+
-- uv package manager
-- Redis server
-- SQLite database: `data/sciscinet_vt_cs_2013_2022.db`
-
-## Install Redis
-
-```bash
-sudo apt-get update && sudo apt-get install -y redis-server
-sudo systemctl start redis-server
-redis-cli ping  # Should return: PONG
-```
-
-## How It Works
-
-The pre-cache script computes two networks from VT CS papers (2018-2022):
-
-**Citation Network**
-- Papers citing each other
-- Filters to important nodes (citation count > 5 OR in_degree > 1)
-- Reduces ~19,000 papers to ~650 core nodes for readable visualization
-- Runs Louvain community detection for colored clusters
-
-**Collaboration Network**
-- Authors who co-authored papers
-- Filters to active collaborators (degree > 2)
-- Edge weight = number of shared papers
-
-Both are cached in Redis for instant API responses. The backend filtering approach (60% payload reduction) ensures the frontend can render and interact with the network smoothly while preserving all essential structural information.
-
-## API Endpoints
-
-- `GET /` - Health check
-- `GET /api/v1/network/citation` - Citation network with communities
-- `GET /api/v1/network/collaboration` - Collaboration network with communities
-- `GET /api/v1/scalability-solution` - Explanation text
-
-## Running Tests
-
-```bash
-uv run python tests/run_all_tests.py
-```

@@ -50,12 +50,69 @@ async def get_patents_by_year(year: int = Query(..., ge=2013, le=2022)):
 
 
 @router.get("/network/hierarchical-citation")
-async def get_hierarchical_citation_network():
-    """Get hierarchical citation network for edge bundling visualization."""
-    data = await get_cached_json("net:hierarchical-citation")
+async def get_hierarchical_citation_network(
+    year_start: int = Query(2018, ge=2013, le=2022, description="Start year (inclusive)"),
+    year_end: int = Query(2022, ge=2013, le=2022, description="End year (inclusive)")
+):
+    """
+    Get hierarchical citation network for edge bundling visualization.
+    Supports filtering by year range for better scalability.
+    Computes on-demand if not cached.
+    """
+    if year_start > year_end:
+        raise HTTPException(status_code=400, detail="year_start must be <= year_end")
+    
+    # Try to get cached data for this specific year range
+    cache_key = f"net:hierarchical-citation:{year_start}-{year_end}"
+    data = await get_cached_json(cache_key)
+    
     if not data:
-        raise HTTPException(status_code=404, detail="Hierarchical citation network data not found. Run pre-cache script.")
+        # Compute on-demand if not cached
+        from src.services.processing import compute_hierarchical_citation_network
+        from src.cache import cache_json
+        
+        try:
+            print(f"Computing hierarchical network on-demand for {year_start}-{year_end}...")
+            data = await compute_hierarchical_citation_network(year_start, year_end)
+            
+            # Cache it for future use
+            await cache_json(cache_key, data)
+            print(f"  Cached {len(data['nodes'])} nodes, {len(data['links'])} links")
+            
+        except Exception as e:
+            raise HTTPException(
+                status_code=500, 
+                detail=f"Failed to compute network for {year_start}-{year_end}: {str(e)}"
+            )
+    
     return data
+
+
+@router.get("/network/hierarchical-citation/available-ranges")
+async def get_available_year_ranges():
+    """Get list of available pre-cached year ranges for hierarchical citation network."""
+    # Individual years (small networks)
+    individual_years = [
+        {"start": year, "end": year, "label": f"{year}", "type": "year"}
+        for year in [2018, 2019, 2020, 2021, 2022]
+    ]
+    
+    # Multi-year ranges (larger networks)
+    multi_year_ranges = [
+        {"start": 2018, "end": 2019, "label": "2018-2019", "type": "range"},
+        {"start": 2019, "end": 2020, "label": "2019-2020", "type": "range"},
+        {"start": 2020, "end": 2021, "label": "2020-2021", "type": "range"},
+        {"start": 2021, "end": 2022, "label": "2021-2022", "type": "range"},
+        {"start": 2018, "end": 2020, "label": "2018-2020 (3 Years)", "type": "range"},
+        {"start": 2020, "end": 2022, "label": "2020-2022 (3 Years)", "type": "range"},
+        {"start": 2018, "end": 2022, "label": "2018-2022 (Full 5 Years)", "type": "range"},
+    ]
+    
+    return {
+        "years": individual_years,
+        "ranges": multi_year_ranges,
+        "default": {"start": 2020, "end": 2022}
+    }
 
 
 @router.get("/scalability-solution")

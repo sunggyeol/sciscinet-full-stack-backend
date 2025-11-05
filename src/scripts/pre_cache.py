@@ -21,16 +21,35 @@ async def main():
     # Clear old keys
     print("Clearing old cache keys...")
     redis = await get_redis()
+    
+    # Use pattern matching to delete all hierarchical citation keys
+    # This handles any previously cached year combination
+    pattern = "net:hierarchical-citation*"
+    cursor = 0
+    deleted_count = 0
+    
+    # Scan and delete all matching keys
+    while True:
+        cursor, keys = await redis.scan(cursor, match=pattern, count=100)
+        if keys:
+            await redis.delete(*keys)
+            deleted_count += len(keys)
+        if cursor == 0:
+            break
+    
+    print(f"  Deleted {deleted_count} old hierarchical network cache keys")
+    
+    # Delete other standard keys
     keys_to_delete = [
         "net:citation",
         "net:collaboration",
         "net:citation-community",
-        "net:hierarchical-citation",
         "data:timeline",
     ] + [f"data:patents:{year}" for year in range(2013, 2023)]
 
     for key in keys_to_delete:
         await redis.delete(key)
+    
     await redis.close()
 
     # Compute and cache citation network
@@ -51,11 +70,62 @@ async def main():
     await cache_json("net:citation-community", community_data)
     print(f"  Cached {len(community_data['children'])} communities")
 
-    # Compute and cache hierarchical citation network
-    print("Computing hierarchical citation network (for edge bundling)...")
-    hierarchical_data = await compute_hierarchical_citation_network()
-    await cache_json("net:hierarchical-citation", hierarchical_data)
-    print(f"  Cached {len(hierarchical_data['nodes'])} nodes, {len(hierarchical_data['links'])} links, {hierarchical_data['total_communities']} communities")
+    # Compute and cache hierarchical citation networks for ALL year combinations
+    print("Computing hierarchical citation networks (for edge bundling)...")
+    print("  This will cache all meaningful year combinations (2013-2022)...")
+    
+    # Cache strategy: individual years + commonly used ranges
+    year_ranges = []
+    available_years = list(range(2013, 2023))  # 2013 to 2022
+    
+    # 1. All individual years (10 years)
+    print(f"  Individual years ({len(available_years)} total):")
+    for year in available_years:
+        year_ranges.append((year, year, f"{year}"))
+    
+    # 2. All 2-year consecutive ranges (9 ranges)
+    print(f"  2-year consecutive ranges:")
+    for start in range(2013, 2022):
+        year_ranges.append((start, start + 1, f"{start}-{start+1}"))
+    
+    # 3. All 3-year consecutive ranges (8 ranges)
+    print(f"  3-year consecutive ranges:")
+    for start in range(2013, 2021):
+        year_ranges.append((start, start + 2, f"{start}-{start+2}"))
+    
+    # 4. Popular longer ranges
+    print(f"  Popular multi-year ranges:")
+    popular_ranges = [
+        (2013, 2017, "2013-2017 (5y)"),
+        (2018, 2022, "2018-2022 (5y)"),
+        (2013, 2022, "2013-2022 (10y Full)"),
+        (2015, 2019, "2015-2019 (5y)"),
+        (2016, 2020, "2016-2020 (5y)"),
+        (2017, 2021, "2017-2021 (5y)"),
+    ]
+    year_ranges.extend(popular_ranges)
+    
+    print(f"\n  Total combinations to cache: {len(year_ranges)}")
+    print(f"  Starting computation...")
+    
+    # Compute and cache each range
+    cached_count = 0
+    for year_start, year_end, label in year_ranges:
+        try:
+            hierarchical_data = await compute_hierarchical_citation_network(year_start, year_end)
+            cache_key = f"net:hierarchical-citation:{year_start}-{year_end}"
+            await cache_json(cache_key, hierarchical_data)
+            cached_count += 1
+            print(f"  [{cached_count}/{len(year_ranges)}] {label}: ✓ {len(hierarchical_data['nodes'])} nodes, {len(hierarchical_data['links'])} links, {hierarchical_data['total_communities']} communities")
+        except Exception as e:
+            print(f"  [{cached_count}/{len(year_ranges)}] {label}: ✗ Error: {str(e)}")
+    
+    # Also cache the default (for backward compatibility)
+    print("\n  Caching default (2018-2022)...")
+    default_data = await compute_hierarchical_citation_network(2018, 2022)
+    await cache_json("net:hierarchical-citation", default_data)
+    
+    print(f"\n  Successfully cached {cached_count} year combinations!")
 
     # Compute and cache papers by year
     print("Computing papers by year...")
